@@ -1,4 +1,4 @@
-import puppeteer from 'puppeteer';
+import puppeteer, { Page } from 'puppeteer';
 import fs from 'fs';
 import * as firebase from 'firebase-admin/app';
 import * as firestore from 'firebase-admin/firestore';
@@ -10,35 +10,61 @@ import { ProfilingIntegration } from "@sentry/profiling-node";
 const BROWSER_WIDTH = 1920;
 const BROWSER_HEIGHT = 1080;
 
-const DUBIZZLE_LOGIN = '';
-const DUBIZZLE_PASSWORD = '';
+const DUBIZZLE_LOGIN = 'adssharmaxmotors@gmail.com';
+const DUBIZZLE_PASSWORD = 'Saatjian286';
 
 const GOOGLE_SHEET_ID = '1MKhbnnVJ7s-kLqT750JJvscOj8a-1iFKUbD4PiTKZrc';
 
-const WAIT_OPTIONS = { timeot: 5 * 60 * 1000 }; // 5 минут
+const WAIT_OPTIONS = { timeout: 5 * 60 * 1000 }; // 5 минут
 
 /**
  * 
  * @param {Page} page 
  */
 async function login(page) {
-    await page.goto('https://dubai.dubizzle.com/user/auth?next=/en/?verify_flow=1' , { waitUntil: 'networkidle2' });
+    console.log('[Авторизация] Начата')
+
+    // await page.setDefaultNavigationTimeout(120000);
+
+    const customUA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0 Safari/537.36';
+ 
+    // Set custom user agent
+    await page.setUserAgent(customUA);
+
+    await page.goto('https://dubai.dubizzle.com/user/auth?next=/en/?verify_flow=1' , { waitUntil: 'domcontentloaded' });
+
+    console.log('[Авторизация] Перешли на страницу авторизации')
 
     await page.waitForSelector('#popup_login_link', WAIT_OPTIONS);
 
+    console.log('[Авторизация] Страница авторизации загрузилась')
+
     await page.click('#popup_login_link');
 
+    console.log('[Авторизация] Нажали на кнопку авторизации через Email')
+
     await page.waitForSelector('#popup_email', WAIT_OPTIONS);
+
+    console.log('[Авторизация] Форма авторизации через Email открылась')
 
     await page.focus('#popup_email');
     await page.keyboard.type(DUBIZZLE_LOGIN);
 
+    console.log('[Авторизация] Ввели логин')
+
     await page.focus('#popup_password');
     await page.keyboard.type(DUBIZZLE_PASSWORD);
 
+    console.log('[Авторизация] Ввели пароль')
+
     await page.click('#popup_login_btn');
 
+    console.log('[Авторизация] Нажали на кнопку submit')
+
     await page.waitForSelector('.homepage', WAIT_OPTIONS);
+
+    console.log('[Авторизация] Редирект на главную прошел успешно')
+    console.log('[Авторизация] Завершена')
 }
 
 /**
@@ -114,13 +140,18 @@ async function injectInfectedFunctions(page) {
  * @param {Page} page 
  */
 async function parseStats(page) {
+    console.log('[Parsing] Начат сбор статиcтики')
     const result = [];
 
     await page.goto('https://dubai.dubizzle.com/mylistings/?status=live', { waitUntil: 'domcontentloaded' });
 
+    console.log('[Parsing] Совершен переход в личный кабинет в раздел live')
+
     await page.waitForSelector('.listing.is-live .stats-menu-option', WAIT_OPTIONS);
 
     const waitStatsData = await injectInfectedFunctions(page);
+
+    console.log('[Parsing] Инжект зараженных функций прошел успешно')
 
     const itemsCount = await page.evaluate(() => {
         return Array.from(document.querySelectorAll('.listing.is-live')).length;
@@ -130,7 +161,7 @@ async function parseStats(page) {
         const hasStats = await page.evaluate((i) => {
             const element = document.querySelector('.listing.is-live');
 
-            const statsMenuOptions = element.querySelector('.stats-menu-option');
+            const statsMenuOptions = element?.querySelector('.stats-menu-option');
 
             if (statsMenuOptions) {
                 statsMenuOptions.click();
@@ -150,8 +181,8 @@ async function parseStats(page) {
                 const element = document.querySelector('.listing.is-live .listing__title');
     
                 return [
-                    element.getAttribute('title'),
-                    element.getAttribute('href').split('---')[1].replace('/', ''),
+                    element?.getAttribute('title'),
+                    element?.getAttribute('href')?.split('---')[1].replace('/', ''),
                 ]
             });
 
@@ -159,7 +190,7 @@ async function parseStats(page) {
                 result.push({
                     title,
                     id,
-                    stats: stats.statsData.map(data => ({
+                    stats: stats.statsData.map((data) => ({
                         type: data.name,
                         data: data.data.map((data) => ({
                             date: data.name,
@@ -177,9 +208,11 @@ async function parseStats(page) {
         await page.evaluate(() => {
             const element = document.querySelector('.listing.is-live');
 
-            element.remove();
+            element?.remove();
         });
     }
+
+    console.log('[Parsing] Статистика успешно собрана')
 
     return result;
 }
@@ -223,6 +256,7 @@ async function saveMonthToGoogleSheets(processedStats) {
         ]
     });
 
+    // @ts-ignore
     const credentials = JSON.parse(fs.readFileSync('./google-spreadsheet-credentials.json'));
 
     const jwt = new JWT({
@@ -254,8 +288,9 @@ async function saveMonthToGoogleSheets(processedStats) {
         month: '2-digit',
         day: '2-digit',
         minute: 'numeric',
-        hour: 'numeric'
-    })];
+        hour: 'numeric',
+        timeZone: "Asia/Dubai",
+    }), 'по Дубайскому времени'];
 
     await sheet.loadCells({ startRowIndex: 0, startColumnIndex: 0 });
 
@@ -299,6 +334,7 @@ async function saveToGoogleSheets(processedStats) {
         ]
     });
 
+    // @ts-ignore
     const credentials = JSON.parse(fs.readFileSync('./google-spreadsheet-credentials.json'));
 
     const jwt = new JWT({
@@ -323,8 +359,9 @@ async function saveToGoogleSheets(processedStats) {
         month: '2-digit',
         day: '2-digit',
         minute: 'numeric',
-        hour: 'numeric'
-    })];
+        hour: 'numeric',
+        timeZone: "Asia/Dubai"
+    }), 'по Дубайскому времени'];
 
     await sheet.loadCells({ startRowIndex: 0, startColumnIndex: 0 });
 
@@ -342,6 +379,7 @@ async function saveToGoogleSheets(processedStats) {
     await sheet.addRows(excel);
 }
 
+// @ts-ignore
 async function saveToFirestore(stats = JSON.parse(fs.readFileSync('./storage.json'))) {
     const dates = stats[0].stats[0].data.map((data) => startOfDay(data.date)).sort((a, b) => {
         return b - a;
@@ -355,13 +393,13 @@ async function saveToFirestore(stats = JSON.parse(fs.readFileSync('./storage.jso
 
             const title = item.title;
             const id = item.id;
-            const emailLeads = item.stats.find(stat => stat.type === 'Email leads').data.find(data => startOfDay(data.date) === dateTime).value;
-            const phoneLeads = item.stats.find(stat => stat.type === 'Phone leads').data.find(data => startOfDay(data.date) === dateTime).value;
-            const smsLeads = item.stats.find(stat => stat.type === 'SMS leads').data.find(data => startOfDay(data.date) === dateTime).value;
-            const chatLeads = item.stats.find(stat => stat.type === 'Chat leads').data.find(data => startOfDay(data.date) === dateTime).value;
-            const detailViews = item.stats.find(stat => stat.type === 'Detail Views').data.find(data => startOfDay(data.date) === dateTime).value;
-            const searchViews = item.stats.find(stat => stat.type === 'Search Views').data.find(data => startOfDay(data.date) === dateTime).value;
-            const refreshes = item.stats.find(stat => stat.type === 'Refreshes').data.find(data => startOfDay(data.date) === dateTime).value;
+            const emailLeads = item.stats.find((stat) => stat.type === 'Email leads').data.find((data) => startOfDay(data.date) === dateTime).value;
+            const phoneLeads = item.stats.find((stat) => stat.type === 'Phone leads').data.find((data) => startOfDay(data.date) === dateTime).value;
+            const smsLeads = item.stats.find((stat) => stat.type === 'SMS leads').data.find((data) => startOfDay(data.date) === dateTime).value;
+            const chatLeads = item.stats.find((stat) => stat.type === 'Chat leads').data.find((data) => startOfDay(data.date) === dateTime).value;
+            const detailViews = item.stats.find((stat) => stat.type === 'Detail Views').data.find((data) => startOfDay(data.date) === dateTime).value;
+            const searchViews = item.stats.find((stat) => stat.type === 'Search Views').data.find((data) => startOfDay(data.date) === dateTime).value;
+            const refreshes = item.stats.find((stat) => stat.type === 'Refreshes').data.find((data) => startOfDay(data.date) === dateTime).value;
 
             storage.push({
                 dateTime,
@@ -369,6 +407,7 @@ async function saveToFirestore(stats = JSON.parse(fs.readFileSync('./storage.jso
                     year: '2-digit',
                     month: '2-digit',
                     day: '2-digit',
+                    timeZone: "Asia/Dubai",
                 }),
                 title,
                 id,
@@ -449,13 +488,19 @@ async function saveToFirestore(stats = JSON.parse(fs.readFileSync('./storage.jso
 }
 
 async function main() {
+    console.log('Попытка запуска браузера');
+
     const browser = await puppeteer.launch({
-        headless: false,
         defaultViewport: { width: BROWSER_WIDTH, height: BROWSER_HEIGHT },
-        args: [`--window-size=${BROWSER_WIDTH},${BROWSER_HEIGHT}`],
+        headless: 'new',
+        args: [`--window-size=${BROWSER_WIDTH},${BROWSER_HEIGHT}`, '--no-sandbox', '--disable-setuid-sandbox'],
     });
 
+    console.log('Браузер запущен');
+
     const page = await browser.newPage(); 
+
+    console.log('Стратовая страница открыта');
 
     await login(page);
 
@@ -463,17 +508,29 @@ async function main() {
 
     browser.close();
 
+    console.log('Браузер закрыт')
+
     const processedMergedStats = await saveToFirestore(stats);
+
+    console.log('Соранение в Firestore прошло успешно')
 
     await saveToGoogleSheets(processedMergedStats);
 
+    console.log('Соранение в Google Sheets прошло успешно')
+
     if (isLastDayOfMonth(processedMergedStats[0].dateTime)) {
         await saveMonthToGoogleSheets(processedMergedStats);
+
+        console.log('Месячный отчет успешно сформирован');
     }
+
+    console.log('Скрипт успешно отработал');
 }
 
 
 async function start() {
+    console.log('Старт')
+
     Sentry.init({
         dsn: "https://e1c6abd4b03dab095de2628a5c8b9112@o4506582960504832.ingest.sentry.io/4506582962274304",
         integrations: [
@@ -484,6 +541,8 @@ async function start() {
         // Set sampling rate for profiling - this is relative to tracesSampleRate
         profilesSampleRate: 1.0,
     });
+
+    console.log('Sentry инициализирован')
 
     await tryNTimes(main, 10, 5 * 60 * 1000);
 }
@@ -499,6 +558,7 @@ start();
  */
 
 async function firebaseInit() {
+    // @ts-ignore
     const credential = JSON.parse(fs.readFileSync('./google-firestore-credentials.json'))
 
     firebase.initializeApp({
@@ -532,6 +592,7 @@ async function tryNTimes(toTry, times = 5, interval = 1000) {
 
             return;
         } catch(error) {
+            console.error(error);
             if (++attemptCount >= times) {
                 Sentry.captureException(error);
                 throw error
@@ -544,5 +605,6 @@ async function tryNTimes(toTry, times = 5, interval = 1000) {
 function isLastDayOfMonth(date) {
     const d = new Date(date);
     const nextDay = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
+    
     return nextDay.getMonth() !== d.getMonth();
 }
