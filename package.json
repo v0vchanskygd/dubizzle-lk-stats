@@ -37,6 +37,7 @@
     "create-require": "^1.1.1",
     "cross-fetch": "^4.0.0",
     "data-uri-to-buffer": "^6.0.1",
+    "datejs": "^1.0.0-rc3",
     "debug": "^4.3.4",
     "degenerator": "^5.0.1",
     "delayed-stream": "^1.0.0",

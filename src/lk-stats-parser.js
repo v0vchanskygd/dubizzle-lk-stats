@@ -140,7 +140,6 @@ async function injectInfectedFunctions(page) {
  * @param {Page} page 
  */
 async function parseStats(page) {
-    console.log('[Parsing] Начат сбор статиcтики')
     const result = [];
 
     await page.goto('https://dubai.dubizzle.com/mylistings/?status=live', { waitUntil: 'domcontentloaded' });
@@ -156,6 +155,8 @@ async function parseStats(page) {
     const itemsCount = await page.evaluate(() => {
         return Array.from(document.querySelectorAll('.listing.is-live')).length;
     });
+
+    console.log('[Parsing] Начат сбор статиcтики')
 
     for (let i = 0; i < itemsCount; i++) {
         const hasStats = await page.evaluate((i) => {
@@ -177,12 +178,15 @@ async function parseStats(page) {
 
             const [stats, removeStatsData] = await parseStatsData();
     
-            const [title, id] = await page.evaluate(() => {
+            const [title, url, id] = await page.evaluate(() => {
                 const element = document.querySelector('.listing.is-live .listing__title');
+
+                const url = element?.getAttribute('href');
     
                 return [
                     element?.getAttribute('title'),
-                    element?.getAttribute('href')?.split('---')[1].replace('/', ''),
+                    url,
+                    url?.split('---')[1].replace('/', ''),
                 ]
             });
 
@@ -190,6 +194,7 @@ async function parseStats(page) {
                 result.push({
                     title,
                     id,
+                    url,
                     stats: stats.statsData.map((data) => ({
                         type: data.name,
                         data: data.data.map((data) => ({
@@ -198,6 +203,8 @@ async function parseStats(page) {
                         })),
                     })),
                 });
+
+                console.log(`[Parsing] ID объявления ${id}`)
             }
     
             await removeStatsData();
@@ -244,8 +251,9 @@ async function saveMonthToGoogleSheets(processedStats) {
     .map((row) => {
         return [
             row.dateString,
-            row.title,
             row.id,
+            row.url,
+            row.title,
             row.emailLeads,
             row.phoneLeads,
             row.smsLeads,
@@ -283,13 +291,13 @@ async function saveMonthToGoogleSheets(processedStats) {
     /**
      * Рендерим шапку
      */
-    const header = ['Дата', 'Название', 'ID', 'Email leads', 'Phone leads', 'SMS leads', 'Chat leads', 'Detail Views', 'Search Views', 'Refreshes', '', 'Последнее обновление', new Date().toLocaleDateString('ru-RU', {
+    const header = ['Дата', 'ID', 'URL', 'Название', 'Email leads', 'Phone leads', 'SMS leads', 'Chat leads', 'Detail Views', 'Search Views', 'Refreshes', '', 'Последнее обновление', new Date().toLocaleDateString('ru-RU', {
         year: '2-digit',
         month: '2-digit',
         day: '2-digit',
         minute: 'numeric',
         hour: 'numeric',
-        timeZone: "Asia/Dubai",
+        timeZone: "Asia/Dubai"
     }), 'по Дубайскому времени'];
 
     await sheet.loadCells({ startRowIndex: 0, startColumnIndex: 0 });
@@ -310,6 +318,7 @@ async function saveMonthToGoogleSheets(processedStats) {
 }
 
 async function saveToGoogleSheets(processedStats) {
+    console.log('[GoogleSheets] Сохранение')
     const excel = processedStats.sort((dataA, dataB) => dataB.dateTime - dataA.dateTime).reduce((acc, curr) => {
         for (let i = 0; i < curr.data.length; i++) {
             const item = curr.data[i];
@@ -322,8 +331,9 @@ async function saveToGoogleSheets(processedStats) {
     .map((row) => {
         return [
             row.dateString,
-            row.title,
             row.id,
+            row.url,
+            row.title,
             row.emailLeads,
             row.phoneLeads,
             row.smsLeads,
@@ -354,7 +364,7 @@ async function saveToGoogleSheets(processedStats) {
     /**
      * Рендерим шапку
      */
-    const header = ['Дата', 'Название', 'ID', 'Email leads', 'Phone leads', 'SMS leads', 'Chat leads', 'Detail Views', 'Search Views', 'Refreshes', '', 'Последнее обновление', new Date().toLocaleDateString('ru-RU', {
+    const header = ['Дата', 'ID', 'URL', 'Название', 'Email leads', 'Phone leads', 'SMS leads', 'Chat leads', 'Detail Views', 'Search Views', 'Refreshes', '', 'Последнее обновление', new Date().toLocaleDateString('ru-RU', {
         year: '2-digit',
         month: '2-digit',
         day: '2-digit',
@@ -377,10 +387,13 @@ async function saveToGoogleSheets(processedStats) {
      * Добавляем данные
      */
     await sheet.addRows(excel);
+
+    console.log('[GoogleSheets] Сохранение прошло успешно')
 }
 
 // @ts-ignore
 async function saveToFirestore(stats = JSON.parse(fs.readFileSync('./storage.json'))) {
+    console.log(`[Firestore] Сохранение`)
     const dates = stats[0].stats[0].data.map((data) => startOfDay(data.date)).sort((a, b) => {
         return b - a;
     }).slice(0, 30);
@@ -393,6 +406,7 @@ async function saveToFirestore(stats = JSON.parse(fs.readFileSync('./storage.jso
 
             const title = item.title;
             const id = item.id;
+            const url = item.url;
             const emailLeads = item.stats.find((stat) => stat.type === 'Email leads').data.find((data) => startOfDay(data.date) === dateTime).value;
             const phoneLeads = item.stats.find((stat) => stat.type === 'Phone leads').data.find((data) => startOfDay(data.date) === dateTime).value;
             const smsLeads = item.stats.find((stat) => stat.type === 'SMS leads').data.find((data) => startOfDay(data.date) === dateTime).value;
@@ -411,6 +425,7 @@ async function saveToFirestore(stats = JSON.parse(fs.readFileSync('./storage.jso
                 }),
                 title,
                 id,
+                url,
                 emailLeads,
                 phoneLeads,
                 smsLeads,
@@ -428,16 +443,6 @@ async function saveToFirestore(stats = JSON.parse(fs.readFileSync('./storage.jso
 
         return acc;
     }, []);
-
-    // fs.writeFileSync('./processedStats.json', JSON.stringify(processedStats))
-
-    // const processedStats = JSON.parse(fs.readFileSync('./processedStats.json'));
-
-    // const dates = processedStats.map(s => s.dateTime).sort((a, b) => {
-    //     return b - a;
-    // }).slice(0, 30);
-
-    await firebaseInit();
     
     const db = firestore.getFirestore();
 
@@ -457,7 +462,9 @@ async function saveToFirestore(stats = JSON.parse(fs.readFileSync('./storage.jso
             for (let i = 0; i < firestoreStat.data.length; i++) {
                 const firestoreStatItem = firestoreStat.data[i];
 
-                if (!data.find((item) => item.id === firestoreStatItem.id)) {
+                const element = data.find((item) => item.id === firestoreStatItem.id)
+
+                if (!element) {
                     data.push(firestoreStatItem);
                 }
             }
@@ -473,9 +480,6 @@ async function saveToFirestore(stats = JSON.parse(fs.readFileSync('./storage.jso
         return acc;
     }, [])
 
-    // fs.writeFileSync('./firestoreStats.json', JSON.stringify(firestoreStats));
-    // fs.writeFileSync('./mergedStats.json', JSON.stringify(mergedStats));
-
     for (let i = 0; i < mergedStats.length; i++) {
         const item = mergedStats[i];
 
@@ -484,11 +488,13 @@ async function saveToFirestore(stats = JSON.parse(fs.readFileSync('./storage.jso
         await docRef.set(item);
     }
 
+    console.log(`[Firestore] Сохранение прошло успешно`)
+
     return mergedStats;
 }
 
 async function main() {
-    console.log('Попытка запуска браузера');
+    console.log('[Browser] Попытка запуска браузера');
 
     const browser = await puppeteer.launch({
         defaultViewport: { width: BROWSER_WIDTH, height: BROWSER_HEIGHT },
@@ -496,11 +502,11 @@ async function main() {
         args: [`--window-size=${BROWSER_WIDTH},${BROWSER_HEIGHT}`, '--no-sandbox', '--disable-setuid-sandbox'],
     });
 
-    console.log('Браузер запущен');
+    console.log('[Browser] Браузер запущен');
 
     const page = await browser.newPage(); 
 
-    console.log('Стратовая страница открыта');
+    console.log('[Browser] Стратовая страница открыта');
 
     await login(page);
 
@@ -508,18 +514,51 @@ async function main() {
 
     browser.close();
 
-    console.log('Браузер закрыт')
+    console.log('[Browser] Браузер закрыт')
+
+    await firebaseInit();
 
     const processedMergedStats = await saveToFirestore(stats);
 
-    console.log('Соранение в Firestore прошло успешно')
-
     await saveToGoogleSheets(processedMergedStats);
 
-    console.log('Соранение в Google Sheets прошло успешно')
-
     if (isLastDayOfMonth(processedMergedStats[0].dateTime)) {
-        await saveMonthToGoogleSheets(processedMergedStats);
+        const today = new Date(processedMergedStats[0].dateTime); // текущая дата
+        // const today = new Date(startOfDay(new Date(1706703677000)));
+        const year = today.getFullYear(); // текущий год
+        const monthIdx = today.getMonth(); // текущий месяц (от 0 до 11)
+        const daysInMonth = today.getDate();
+
+        const datesArray = []; // пустой массив для хранения дат
+
+        for (let day = 1; day <= daysInMonth; day++) {
+            const date = new Date();
+            date.setFullYear(2024)
+            date.setMonth(monthIdx);
+            date.setDate(day);
+
+            datesArray.push(startOfDay(date)); // добавляем дату в массив
+        }
+
+        const chunks = getChunksFromArray(datesArray, 30);
+
+        const db = firestore.getFirestore();
+
+        let stats = [];
+
+        for (let i = 0; i < chunks.length; i++) {
+            const chunk = chunks[i]
+
+            const snapshot = await db.collection('dubizzle-lk-stats').where('dateTime', 'in', chunk).get();
+
+            const firestoreStats = snapshot.docs.map((doc) => {
+                return doc.data();
+            });
+
+            stats = [...stats, ...firestoreStats]
+        }
+
+        await saveMonthToGoogleSheets(stats);
 
         console.log('Месячный отчет успешно сформирован');
     }
@@ -559,7 +598,7 @@ start();
 
 async function firebaseInit() {
     // @ts-ignore
-    const credential = JSON.parse(fs.readFileSync('./google-firestore-credentials.json'))
+    const credential = JSON.parse(fs.readFileSync('google-firestore-credentials.json'))
 
     firebase.initializeApp({
         credential: firebase.cert(credential)
@@ -607,4 +646,22 @@ function isLastDayOfMonth(date) {
     const nextDay = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
     
     return nextDay.getMonth() !== d.getMonth();
+}
+
+function getDaysCountInCurrentMonth() {
+    const year = (new Date()).getFullYear();
+
+    
+}
+
+function getChunksFromArray(array, size) {
+    const chunks = [];
+
+    for (let i = 0; i < array.length; i += size) {
+        const chunk = array.slice(i, i + size);
+        // do whatever
+        chunks.push(chunk);
+    }
+
+    return chunks;
 }
