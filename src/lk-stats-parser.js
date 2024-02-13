@@ -11,7 +11,7 @@ const BROWSER_WIDTH = 1920;
 const BROWSER_HEIGHT = 1080;
 
 const DUBIZZLE_LOGIN = 'adssharmaxmotors@gmail.com';
-const DUBIZZLE_PASSWORD = 'Saatjian286';
+const DUBIZZLE_PASSWORD = 'Sharshaheen@2050';
 
 const GOOGLE_SHEET_ID = '1MKhbnnVJ7s-kLqT750JJvscOj8a-1iFKUbD4PiTKZrc';
 
