@@ -225,20 +225,20 @@ async function parseStats(page) {
 }
 
 async function saveMonthToGoogleSheets(processedStats) {
-    const currDate = new Date(processedStats[0].dateTime);
-    const currMonth = currDate.getMonth();
-    const date = currDate.toLocaleDateString('ru-RU', {
-        year: 'numeric',
-        month: '2-digit',
-    });
+    // const currDate = new Date(processedStats[0].dateTime);
+    // const currMonth = currDate.getMonth();
+    // const date = currDate.toLocaleDateString('ru-RU', {
+    //     year: 'numeric',
+    //     month: '2-digit',
+    // });
 
     const excel = processedStats.sort((dataA, dataB) => dataB.dateTime - dataA.dateTime)
-    .filter((date) => {
-        const dateObj = new Date(date.dateTime);
-        const month = dateObj.getMonth();
+    // .filter((date) => {
+    //     const dateObj = new Date(date.dateTime);
+    //     const month = dateObj.getMonth();
 
-        return month === currMonth;
-    })
+    //     return month === currMonth;
+    // })
     .reduce((acc, curr) => {
         for (let i = 0; i < curr.data.length; i++) {
             const item = curr.data[i];
@@ -264,6 +264,8 @@ async function saveMonthToGoogleSheets(processedStats) {
         ]
     });
 
+    console.log(excel)
+
     // @ts-ignore
     const credentials = JSON.parse(fs.readFileSync('./google-spreadsheet-credentials.json'));
 
@@ -277,16 +279,20 @@ async function saveMonthToGoogleSheets(processedStats) {
 
     await doc.loadInfo();
 
-    let sheet = doc.sheetsByTitle[date];
+    const sheet = doc.sheetsByTitle['Скользящая статистика за полгода'];
 
-    if (sheet) {
-        return;
-    }
+    await sheet.clear();
 
-    sheet = await doc.addSheet({
-        title: date,
-        index: 1,
-    });
+    // let sheet = doc.sheetsByTitle[date];
+
+    // if (sheet) {
+    //     return;
+    // }
+
+    // sheet = await doc.addSheet({
+    //     title: date,
+    //     index: 1,
+    // });
 
     /**
      * Рендерим шапку
@@ -496,51 +502,63 @@ async function saveToFirestore(stats = JSON.parse(fs.readFileSync('./storage.jso
 async function main() {
     console.log('[Browser] Попытка запуска браузера');
 
-    const browser = await puppeteer.launch({
-        defaultViewport: { width: BROWSER_WIDTH, height: BROWSER_HEIGHT },
-        headless: 'new',
-        args: [`--window-size=${BROWSER_WIDTH},${BROWSER_HEIGHT}`, '--no-sandbox', '--disable-setuid-sandbox'],
-    });
+    // const browser = await puppeteer.launch({
+    //     defaultViewport: { width: BROWSER_WIDTH, height: BROWSER_HEIGHT },
+    //     headless: 'new',
+    //     args: [`--window-size=${BROWSER_WIDTH},${BROWSER_HEIGHT}`, '--no-sandbox', '--disable-setuid-sandbox'],
+    // });
 
-    console.log('[Browser] Браузер запущен');
+    // console.log('[Browser] Браузер запущен');
 
-    const page = await browser.newPage(); 
+    // const page = await browser.newPage(); 
 
-    console.log('[Browser] Стратовая страница открыта');
+    // console.log('[Browser] Стратовая страница открыта');
 
-    await login(page);
+    // await login(page);
 
-    const stats = await parseStats(page);
+    // const stats = await parseStats(page);
 
-    browser.close();
+    // browser.close();
 
-    console.log('[Browser] Браузер закрыт')
+    // console.log('[Browser] Браузер закрыт')
 
     await firebaseInit();
 
-    const processedMergedStats = await saveToFirestore(stats);
+    // await saveToFirestore(stats);
 
-    await saveToGoogleSheets(processedMergedStats);
+    // // const processedMergedStats = await saveToFirestore(stats);
 
-    if (isLastDayOfMonth(processedMergedStats[0].dateTime)) {
-        const today = new Date(processedMergedStats[0].dateTime); // текущая дата
-        // const today = new Date(startOfDay(new Date(1706703677000)));
-        const year = today.getFullYear(); // текущий год
-        const monthIdx = today.getMonth(); // текущий месяц (от 0 до 11)
-        const daysInMonth = today.getDate();
+    // // await saveToGoogleSheets(processedMergedStats);
 
-        const datesArray = []; // пустой массив для хранения дат
+    const last180Days = getLast180Days();
 
-        for (let day = 1; day <= daysInMonth; day++) {
-            const date = new Date();
-            date.setFullYear(2024)
-            date.setMonth(monthIdx);
-            date.setDate(day);
+    const datesArray = last180Days.map((date) => startOfDay(date));
 
-            datesArray.push(startOfDay(date)); // добавляем дату в массив
-        }
+    // if (isLastDayOfMonth(processedMergedStats[0].dateTime)) {
+    if (true) {
+        // const today = new Date(processedMergedStats[0].dateTime); // текущая дата
+        // // const today = new Date(startOfDay(new Date(1706703677000)));
+        // const year = today.getFullYear(); // текущий год
+        // const monthIdx = today.getMonth(); // текущий месяц (от 0 до 11)
+        // // const daysInMonth = today.getDate();
+        // const daysInMonth = 180;
+
+        // const datesArray = []; // пустой массив для хранения дат
+
+        // for (let day = 1; day <= daysInMonth; day++) {
+        //     const date = new Date();
+        //     date.setFullYear(year)
+        //     date.setMonth(monthIdx);
+        //     date.setDate(day);
+
+        //     datesArray.push(startOfDay(date)); // добавляем дату в массив
+        // }
 
         const chunks = getChunksFromArray(datesArray, 30);
+
+        console.log(chunks);
+        
+        // return
 
         const db = firestore.getFirestore();
 
@@ -555,10 +573,17 @@ async function main() {
                 return doc.data();
             });
 
-            stats = [...stats, ...firestoreStats]
+            stats = [...stats, ...firestoreStats];
         }
 
+
+
+        console.log('stats', stats.length)
+
+        // return;
+
         await saveMonthToGoogleSheets(stats);
+        // await saveToGoogleSheets(stats);
 
         console.log('Месячный отчет успешно сформирован');
     }
@@ -583,7 +608,7 @@ async function start() {
 
     console.log('Sentry инициализирован')
 
-    await tryNTimes(main, 10, 5 * 60 * 1000);
+    await tryNTimes(main, 10, 60 * 1000);
 }
 
 /**
@@ -664,4 +689,19 @@ function getChunksFromArray(array, size) {
     }
 
     return chunks;
+}
+
+function getLast180Days() {
+    const datesArray = [];
+    const today = new Date();
+
+    for (let i = 0; i < 180; i++) {
+    const date = new Date(today);
+    date.setDate(today.getDate() - i);
+    datesArray.push(date);
+    }
+
+    datesArray.sort((a, b) => b - a);
+
+    return datesArray;
 }
