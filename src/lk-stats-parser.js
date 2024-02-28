@@ -502,63 +502,41 @@ async function saveToFirestore(stats = JSON.parse(fs.readFileSync('./storage.jso
 async function main() {
     console.log('[Browser] Попытка запуска браузера');
 
-    // const browser = await puppeteer.launch({
-    //     defaultViewport: { width: BROWSER_WIDTH, height: BROWSER_HEIGHT },
-    //     headless: 'new',
-    //     args: [`--window-size=${BROWSER_WIDTH},${BROWSER_HEIGHT}`, '--no-sandbox', '--disable-setuid-sandbox'],
-    // });
+    const browser = await puppeteer.launch({
+        defaultViewport: { width: BROWSER_WIDTH, height: BROWSER_HEIGHT },
+        headless: 'new',
+        args: [`--window-size=${BROWSER_WIDTH},${BROWSER_HEIGHT}`, '--no-sandbox', '--disable-setuid-sandbox'],
+    });
 
-    // console.log('[Browser] Браузер запущен');
+    console.log('[Browser] Браузер запущен');
 
-    // const page = await browser.newPage(); 
+    const page = await browser.newPage(); 
 
-    // console.log('[Browser] Стратовая страница открыта');
+    console.log('[Browser] Стратовая страница открыта');
 
-    // await login(page);
+    await login(page);
 
-    // const stats = await parseStats(page);
+    const stats = await parseStats(page);
 
-    // browser.close();
+    browser.close();
 
-    // console.log('[Browser] Браузер закрыт')
+    console.log('[Browser] Браузер закрыт')
 
     await firebaseInit();
 
-    // await saveToFirestore(stats);
+    await saveToFirestore(stats);
 
-    // // const processedMergedStats = await saveToFirestore(stats);
+    // const processedMergedStats = await saveToFirestore(stats);
 
-    // // await saveToGoogleSheets(processedMergedStats);
+    // await saveToGoogleSheets(processedMergedStats);
 
     const last180Days = getLast180Days();
 
     const datesArray = last180Days.map((date) => startOfDay(date));
 
-    // if (isLastDayOfMonth(processedMergedStats[0].dateTime)) {
     if (true) {
-        // const today = new Date(processedMergedStats[0].dateTime); // текущая дата
-        // // const today = new Date(startOfDay(new Date(1706703677000)));
-        // const year = today.getFullYear(); // текущий год
-        // const monthIdx = today.getMonth(); // текущий месяц (от 0 до 11)
-        // // const daysInMonth = today.getDate();
-        // const daysInMonth = 180;
-
-        // const datesArray = []; // пустой массив для хранения дат
-
-        // for (let day = 1; day <= daysInMonth; day++) {
-        //     const date = new Date();
-        //     date.setFullYear(year)
-        //     date.setMonth(monthIdx);
-        //     date.setDate(day);
-
-        //     datesArray.push(startOfDay(date)); // добавляем дату в массив
-        // }
 
         const chunks = getChunksFromArray(datesArray, 30);
-
-        console.log(chunks);
-        
-        // return
 
         const db = firestore.getFirestore();
 
@@ -576,14 +554,7 @@ async function main() {
             stats = [...stats, ...firestoreStats];
         }
 
-
-
-        console.log('stats', stats.length)
-
-        // return;
-
         await saveMonthToGoogleSheets(stats);
-        // await saveToGoogleSheets(stats);
 
         console.log('Месячный отчет успешно сформирован');
     }
