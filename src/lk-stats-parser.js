@@ -264,8 +264,6 @@ async function saveMonthToGoogleSheets(processedStats) {
         ]
     });
 
-    console.log(excel)
-
     // @ts-ignore
     const credentials = JSON.parse(fs.readFileSync('./google-spreadsheet-credentials.json'));
 
@@ -506,6 +504,7 @@ async function main() {
         defaultViewport: { width: BROWSER_WIDTH, height: BROWSER_HEIGHT },
         headless: 'new',
         args: [`--window-size=${BROWSER_WIDTH},${BROWSER_HEIGHT}`, '--no-sandbox', '--disable-setuid-sandbox'],
+        timeout: 0,
     });
 
     console.log('[Browser] Браузер запущен');
