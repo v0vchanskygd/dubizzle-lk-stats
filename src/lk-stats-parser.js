@@ -7,15 +7,15 @@ import { JWT } from 'google-auth-library';
 import * as Sentry from "@sentry/node";
 import { ProfilingIntegration } from "@sentry/profiling-node";
 
-const BROWSER_WIDTH = 1920;
-const BROWSER_HEIGHT = 1080;
+const BROWSER_WIDTH = 1200;
+const BROWSER_HEIGHT = 720;
 
 const DUBIZZLE_LOGIN = 'adssharmaxmotors@gmail.com';
 const DUBIZZLE_PASSWORD = 'Sharshaheen@2050';
 
 const GOOGLE_SHEET_ID = '1MKhbnnVJ7s-kLqT750JJvscOj8a-1iFKUbD4PiTKZrc';
 
-const WAIT_OPTIONS = { timeout: 5 * 60 * 1000 }; // 5 минут
+const WAIT_OPTIONS = { timeout: 60 * 1000 }; // 5 минут
 
 /**
  * 
@@ -142,11 +142,12 @@ async function injectInfectedFunctions(page) {
 async function parseStats(page) {
     const result = [];
 
-    await page.goto('https://dubai.dubizzle.com/mylistings/?status=live', { waitUntil: 'domcontentloaded' });
+    await page.goto('https://dubai.dubizzle.com/mylistings/?status=live', { waitUntil: 'load', timeout: 3 * 60 * 1000 });
 
-    console.log('[Parsing] Совершен переход в личный кабинет в раздел live')
+    console.log('[Parsing] Совершен переход в личный кабинет в раздел Live')
 
     await page.waitForSelector('.listing.is-live .stats-menu-option', WAIT_OPTIONS);
+    await page.waitForSelector('.listing__wrapper', WAIT_OPTIONS);
 
     const waitStatsData = await injectInfectedFunctions(page);
 
@@ -157,6 +158,7 @@ async function parseStats(page) {
     });
 
     console.log('[Parsing] Начат сбор статиcтики')
+    console.log(`[Parsing] Количество айтемов: ${itemsCount}`)
 
     for (let i = 0; i < itemsCount; i++) {
         const hasStats = await page.evaluate((i) => {
@@ -503,8 +505,12 @@ async function main() {
     const browser = await puppeteer.launch({
         defaultViewport: { width: BROWSER_WIDTH, height: BROWSER_HEIGHT },
         headless: 'new',
-        args: [`--window-size=${BROWSER_WIDTH},${BROWSER_HEIGHT}`, '--no-sandbox', '--disable-setuid-sandbox'],
-        timeout: 0,
+        args: [
+            `--window-size=${BROWSER_WIDTH},${BROWSER_HEIGHT}`,
+            '--no-sandbox',
+            '--disable-setuid-sandbox'
+        ],
+        timeout: 60_000,
     });
 
     console.log('[Browser] Браузер запущен');
@@ -517,7 +523,7 @@ async function main() {
 
     const stats = await parseStats(page);
 
-    browser.close();
+    await browser.close();
 
     console.log('[Browser] Браузер закрыт')
 
