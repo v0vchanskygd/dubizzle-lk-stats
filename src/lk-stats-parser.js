@@ -141,6 +141,7 @@ async function injectInfectedFunctions(page) {
  */
 async function parseStats(page) {
     const result = [];
+    const pricesFeatures = {};
 
     await page.goto('https://dubai.dubizzle.com/mylistings/?status=live', { waitUntil: 'load', timeout: 3 * 60 * 1000 });
 
@@ -180,15 +181,29 @@ async function parseStats(page) {
 
             const [stats, removeStatsData] = await parseStatsData();
     
-            const [title, url, id] = await page.evaluate(() => {
-                const element = document.querySelector('.listing.is-live .listing__title');
+            const [title, url, id, price, feature] = await page.evaluate(() => {
+                const element = document.querySelector('.listing.is-live');
+                const title = element.querySelector('.listing__title');
 
-                const url = element?.getAttribute('href');
-    
+                const url = title.getAttribute('href');
+                const price = Number(element.querySelector('.listing__price').innerText.replace(/\D/ig, ''));
+                const featured = element.querySelector('.listing__tag.featured');
+                const premium = element.querySelector('.listing__tag.super_ad');
+
+                let feature = null;
+
+                if (featured) {
+                    feature = featured.innerText;
+                } else if (premium) {
+                    feature = premium.innerText;
+                }
+
                 return [
-                    element?.getAttribute('title'),
+                    title?.getAttribute('title'),
                     url,
                     url?.split('---')[1].replace('/', ''),
+                    price,
+                    feature,
                 ]
             });
 
@@ -205,6 +220,11 @@ async function parseStats(page) {
                         })),
                     })),
                 });
+                
+                pricesFeatures[id] = {
+                    price,
+                    feature,
+                }
 
                 console.log(`[Parsing] ID объявления ${id}`)
             }
@@ -223,24 +243,11 @@ async function parseStats(page) {
 
     console.log('[Parsing] Статистика успешно собрана')
 
-    return result;
+    return [result, pricesFeatures];
 }
 
-async function saveMonthToGoogleSheets(processedStats) {
-    // const currDate = new Date(processedStats[0].dateTime);
-    // const currMonth = currDate.getMonth();
-    // const date = currDate.toLocaleDateString('ru-RU', {
-    //     year: 'numeric',
-    //     month: '2-digit',
-    // });
-
+async function saveMonthToGoogleSheets(processedStats, pricesFeatures) {
     const excel = processedStats.sort((dataA, dataB) => dataB.dateTime - dataA.dateTime)
-    // .filter((date) => {
-    //     const dateObj = new Date(date.dateTime);
-    //     const month = dateObj.getMonth();
-
-    //     return month === currMonth;
-    // })
     .reduce((acc, curr) => {
         for (let i = 0; i < curr.data.length; i++) {
             const item = curr.data[i];
@@ -251,11 +258,18 @@ async function saveMonthToGoogleSheets(processedStats) {
         return acc;
     }, [])
     .map((row) => {
+        const priceFeatureItem = pricesFeatures[row.id];
+
+        const price = priceFeatureItem ? (priceFeatureItem.price || 'None') : 'No data'
+        const feature = priceFeatureItem ? (priceFeatureItem.feature || 'None') : 'No data';
+
         return [
             row.dateString,
             row.id,
             row.url,
             row.title,
+            price,
+            feature,
             row.emailLeads,
             row.phoneLeads,
             row.smsLeads,
@@ -283,21 +297,10 @@ async function saveMonthToGoogleSheets(processedStats) {
 
     await sheet.clear();
 
-    // let sheet = doc.sheetsByTitle[date];
-
-    // if (sheet) {
-    //     return;
-    // }
-
-    // sheet = await doc.addSheet({
-    //     title: date,
-    //     index: 1,
-    // });
-
     /**
      * Рендерим шапку
      */
-    const header = ['Дата', 'ID', 'URL', 'Название', 'Email leads', 'Phone leads', 'SMS leads', 'Chat leads', 'Detail Views', 'Search Views', 'Refreshes', '', 'Последнее обновление', new Date().toLocaleDateString('ru-RU', {
+    const header = ['Дата', 'ID', 'URL', 'Название', 'Цена', 'Услуга', 'Email leads', 'Phone leads', 'SMS leads', 'Chat leads', 'Detail Views', 'Search Views', 'Refreshes', '', 'Последнее обновление', new Date().toLocaleDateString('ru-RU', {
         year: '2-digit',
         month: '2-digit',
         day: '2-digit',
@@ -499,12 +502,23 @@ async function saveToFirestore(stats = JSON.parse(fs.readFileSync('./storage.jso
     return mergedStats;
 }
 
+async function savePricesToFirestore(pricesFeatures) {
+    const dateStart = startOfDay(new Date());
+
+    const db = firestore.getFirestore();
+
+    const docRef = db.collection('dubizzle-lk-stats-prices-features').doc(`${dateStart}`);
+
+    await docRef.set(pricesFeatures);
+}
+
 async function main() {
     console.log('[Browser] Попытка запуска браузера');
 
     const browser = await puppeteer.launch({
         defaultViewport: { width: BROWSER_WIDTH, height: BROWSER_HEIGHT },
         headless: 'new',
+        // headless: false,
         args: [
             `--window-size=${BROWSER_WIDTH},${BROWSER_HEIGHT}`,
             '--no-sandbox',
@@ -521,7 +535,7 @@ async function main() {
 
     await login(page);
 
-    const stats = await parseStats(page);
+    const [stats, pricesFeatures] = await parseStats(page);
 
     await browser.close();
 
@@ -529,18 +543,14 @@ async function main() {
 
     await firebaseInit();
 
+    await savePricesToFirestore(pricesFeatures);
     await saveToFirestore(stats);
-
-    // const processedMergedStats = await saveToFirestore(stats);
-
-    // await saveToGoogleSheets(processedMergedStats);
 
     const last180Days = getLast180Days();
 
     const datesArray = last180Days.map((date) => startOfDay(date));
 
     if (true) {
-
         const chunks = getChunksFromArray(datesArray, 30);
 
         const db = firestore.getFirestore();
@@ -559,7 +569,7 @@ async function main() {
             stats = [...stats, ...firestoreStats];
         }
 
-        await saveMonthToGoogleSheets(stats);
+        await saveMonthToGoogleSheets(stats, pricesFeatures);
 
         console.log('Месячный отчет успешно сформирован');
     }
