@@ -258,7 +258,9 @@ async function saveMonthToGoogleSheets(processedStats, pricesFeatures) {
         return acc;
     }, [])
     .map((row) => {
-        const priceFeatureItem = pricesFeatures[row.id];
+        const currentDateFeatureItem = pricesFeatures.find((item) => item.dateTime === row.dateTime);
+
+        const priceFeatureItem = currentDateFeatureItem ? currentDateFeatureItem.pricesFeatures[row.id] : undefined;
 
         const price = priceFeatureItem ? (priceFeatureItem.price || 'None') : 'No data'
         const feature = priceFeatureItem ? (priceFeatureItem.feature || 'None') : 'No data';
@@ -503,13 +505,16 @@ async function saveToFirestore(stats = JSON.parse(fs.readFileSync('./storage.jso
 }
 
 async function savePricesToFirestore(pricesFeatures) {
-    const dateStart = startOfDay(new Date());
+    const dateTime = startOfDay(new Date());
 
     const db = firestore.getFirestore();
 
-    const docRef = db.collection('dubizzle-lk-stats-prices-features').doc(`${dateStart}`);
+    const docRef = db.collection('dubizzle-lk-stats-prices-features').doc(`${dateTime}`);
 
-    await docRef.set(pricesFeatures);
+    await docRef.set({
+        pricesFeatures,
+        dateTime,
+    });
 }
 
 async function main() {
@@ -556,20 +561,30 @@ async function main() {
         const db = firestore.getFirestore();
 
         let stats = [];
+        let featurePrices = [];
 
         for (let i = 0; i < chunks.length; i++) {
             const chunk = chunks[i]
 
-            const snapshot = await db.collection('dubizzle-lk-stats').where('dateTime', 'in', chunk).get();
+            const statsSnapshot = await db.collection('dubizzle-lk-stats').where('dateTime', 'in', chunk).get();
 
-            const firestoreStats = snapshot.docs.map((doc) => {
+            const statsSnapshotfirestoreStats = statsSnapshot.docs.map((doc) => {
                 return doc.data();
             });
 
-            stats = [...stats, ...firestoreStats];
+            const featurePricesSnapshot = await db.collection('dubizzle-lk-stats-prices-features').where('dateTime', 'in', chunk).get();
+
+            const featurePricesSnapshotfirestoreStats = featurePricesSnapshot.docs.map((doc) => {
+                return doc.data();
+            });
+
+            stats = [...stats, ...statsSnapshotfirestoreStats];
+            featurePrices = [...featurePrices, ...featurePricesSnapshotfirestoreStats]
         }
 
-        await saveMonthToGoogleSheets(stats, pricesFeatures);
+        console.log('featurePrices', featurePrices)
+
+        await saveMonthToGoogleSheets(stats, featurePrices);
 
         console.log('Месячный отчет успешно сформирован');
     }
