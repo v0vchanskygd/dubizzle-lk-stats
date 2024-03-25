@@ -143,9 +143,11 @@ async function parseStats(page) {
     const result = [];
     const pricesFeatures = {};
 
+    console.log('[Parsing] Начинаем переход в личный кабинет в раздел Live')
+
     await page.goto('https://dubai.dubizzle.com/mylistings/?status=live', { waitUntil: 'load', timeout: 3 * 60 * 1000 });
 
-    console.log('[Parsing] Совершен переход в личный кабинет в раздел Live')
+    console.log('[Parsing] Переход в личный кабинет в раздел Live прошел успешно')
 
     await page.waitForSelector('.listing.is-live .stats-menu-option', WAIT_OPTIONS);
     await page.waitForSelector('.listing__wrapper', WAIT_OPTIONS);
@@ -581,8 +583,6 @@ async function main() {
             stats = [...stats, ...statsSnapshotfirestoreStats];
             featurePrices = [...featurePrices, ...featurePricesSnapshotfirestoreStats]
         }
-
-        console.log('featurePrices', featurePrices)
 
         await saveMonthToGoogleSheets(stats, featurePrices);
 
