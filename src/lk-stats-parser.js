@@ -272,15 +272,15 @@ async function saveMonthToGoogleSheets(processedStats, pricesFeatures) {
             row.id,
             row.url,
             row.title,
-            price,
-            feature,
             row.emailLeads,
             row.phoneLeads,
             row.smsLeads,
             row.chatLeads,
             row.detailViews,
             row.searchViews,
-            row.refreshes
+            row.refreshes,
+            price,
+            feature,
         ]
     });
 
@@ -304,7 +304,7 @@ async function saveMonthToGoogleSheets(processedStats, pricesFeatures) {
     /**
      * Рендерим шапку
      */
-    const header = ['Дата', 'ID', 'URL', 'Название', 'Цена', 'Услуга', 'Email leads', 'Phone leads', 'SMS leads', 'Chat leads', 'Detail Views', 'Search Views', 'Refreshes', '', 'Последнее обновление', new Date().toLocaleDateString('ru-RU', {
+    const header = ['Дата', 'ID', 'URL', 'Название', 'Email leads', 'Phone leads', 'SMS leads', 'Chat leads', 'Detail Views', 'Search Views', 'Refreshes', 'Цена', 'Услуга', '', 'Последнее обновление', new Date().toLocaleDateString('ru-RU', {
         year: '2-digit',
         month: '2-digit',
         day: '2-digit',
